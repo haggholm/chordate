@@ -1,4 +1,27 @@
 {
-  "presets": ["env", "react"],
-  "plugins": ["transform-class-properties"]
+  "presets": [
+    [
+      "@babel/preset-env",
+      {
+        "targets": {
+          "browsers": [
+            "last 2 Chrome versions",
+            "last 2 Firefox versions"
+          ]
+        }
+      }
+    ]
+  ],
+  "plugins": [
+    [
+      "@babel/plugin-proposal-decorators",
+      {
+        "legacy": true
+      }
+    ],
+    "@babel/plugin-proposal-object-rest-spread",
+    "@babel/plugin-proposal-class-properties",
+    "babel-plugin-transform-flow-comments",
+    "babel-plugin-transform-react-jsx"
+  ]
 }

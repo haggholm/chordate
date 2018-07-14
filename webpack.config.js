@@ -20,18 +20,50 @@ module.exports = {
         }
       },
       {
+        test: /\.scss$/,
+        use: [
+          'style-loader',
+          'css-loader',
+          {
+            loader: 'sass-loader', options: {
+              includePaths: [
+                // path.join(__dirname, 'node_modules'),
+                // path.join(__dirname, 'node_modules', 'bootstrap-sass', 'assets'),
+                path.join(__dirname, 'node_modules', 'bootstrap-sass', 'assets', 'stylesheets')
+              ]
+            }
+          }
+        ]
+      },
+      {
         test: /\.css$/,
-        use: ['style-loader', 'css-loader']
+        use:
+          ['style-loader', 'css-loader']
+      },
+      {
+        test: /\.(png|jpg|gif|woff|woff2|ttf|svg|eot)$/,
+        use: [
+          {
+            loader: 'file-loader',
+            options: {
+              emit: true
+            }
+          }
+        ]
       }
     ]
   },
   devServer: {
     port: 3000,
-    open: true,
-    proxy: {
-      '/api': 'http://localhost:8080'
-    }
-  },
+    open:
+      true,
+    proxy:
+      {
+        '/api':
+          'http://localhost:8080'
+      }
+  }
+  ,
   plugins: [
     new CleanWebpackPlugin([outputDirectory]),
     new HtmlWebpackPlugin({
@@ -39,4 +71,5 @@ module.exports = {
       favicon: './public/favicon.ico'
     })
   ]
-};
+}
+;
