@@ -18,6 +18,7 @@ import {
   PageHeader,
   Panel,
   Row,
+  Tab, Tabs,
   ToggleButton,
   ToggleButtonGroup,
 } from 'react-bootstrap';
@@ -27,6 +28,11 @@ type ItemType = {
   id: number,
   name: string
 };
+
+
+function itemCmp(it1, it2) {
+  return it1.name < it2.name ? -1 : (it1.name === it2.name ? 0 : +1);
+}
 
 
 export default class Record extends React.PureComponent {
@@ -61,9 +67,28 @@ export default class Record extends React.PureComponent {
         });
       });
 
-    fetch('/api/chord/list').then(async (response) => this.setState({ chords: await response.json() }));
-    fetch('/api/note/list').then(async (response) => this.setState({ notes: await response.json() }));
-    fetch('/api/strumming_pattern/list').then(async (response) => this.setState({ strumming_patterns: await response.json() }));
+    fetch('/api/chord/list').then(async (response) => this.setState({ chords: (await response.json()).sort(itemCmp) }));
+    fetch('/api/note/list').then(async (response) => this.setState({ notes: (await response.json()).sort(itemCmp) }));
+    fetch('/api/strumming_pattern/list').then(async (response) => this.setState({ strumming_patterns: (await response.json()).sort(itemCmp) }));
+  }
+
+  @autobind
+  setType(tp: 'chord' | 'note' | 'strumming_pattern') {
+    if (tp === this.state.type) {
+      return;
+    }
+
+    if (this.state.audioURL) {
+      URL.revokeObjectURL(this.state.audioURL);
+    }
+    this.setState({
+      id: null,
+      type: tp,
+      name: '',
+      audio: null,
+      audioURL: null,
+      audioBlob: null
+    });
   }
 
   render() {
@@ -74,8 +99,7 @@ export default class Record extends React.PureComponent {
           <Col md={12}><PageHeader>Recording</PageHeader></Col>
         </Row>
         <Row className="show-grid">
-          <Col md={3}>{this.renderItems()}</Col>
-          <Col xs={12} md={9}>{this.renderForm()}</Col>
+          <Col md={12}>{this.renderItems()}</Col>
         </Row>
       </Grid>
     );
@@ -83,32 +107,47 @@ export default class Record extends React.PureComponent {
 
   renderItems() {
     return (
-      <React.Fragment>
+      <Tabs
+        activeKey={this.state.type}
+        onSelect={this.setType}>
         {[['chord', 'Chords'], ['note', 'Notes'], ['strummingPattern', 'Strumming patterns']].map(([tp, desc]) => (
-          <Row key={tp} className="show-grid">
-            <Col md={12}>
-              <Panel>
-                <Panel.Heading>{desc}</Panel.Heading>
-                <Panel.Body>
-                  <ListGroup>
-                  {this.state[`${tp}s`].map((item) => (
-                    <ListGroupItem key={item.id} onClick={() => this.selectItem(tp, item)}>
-                      {item.name}
-                    </ListGroupItem>
-                  ))}
-                  </ListGroup>
-                </Panel.Body>
-              </Panel>
+          <Tab key={tp} eventKey={tp} title={desc} className="form-tabs">
+            <Col md={3}>
+              <ListGroup>
+                <ListGroupItem onClick={() => this.selectItem(tp, null)} active={!this.state.id}>
+                  <i className="fa fa-plus"/>
+                </ListGroupItem>
+                {this.state[`${tp}s`].map((item) => (
+                  <ListGroupItem key={item.id} onClick={() => this.selectItem(tp, item)} active={item.id === this.state.id}>
+                    {item.name}
+                  </ListGroupItem>
+                ))}
+              </ListGroup>
             </Col>
-          </Row>
+            <Col md={9}>
+              { tp === this.state.type && this.renderForm() }
+            </Col>
+          </Tab>
         ))}
-      </React.Fragment>
+      </Tabs>
     );
   }
 
   async selectItem(tp, item) {
     if (this.state.audioURL) {
       URL.revokeObjectURL(this.state.audioURL);
+    }
+
+    if (!item) {
+      this.setState({
+        id: null,
+        type: tp,
+        name: '',
+        audio: null,
+        audioURL: null,
+        audioBlob: null
+      });
+      return;
     }
 
     this.setState({
@@ -153,83 +192,48 @@ export default class Record extends React.PureComponent {
     return (
       <React.Fragment>
         <Row className="show-grid">
-          <Col xs={0} md={2}/>
+          <Col xs={0} md={1}/>
           <Col xs={12} md={8}>
+            <ButtonGroup>
             {!this.state.isRecording
               ? (
-                <Button bsStyle="primary" onClick={() => this.startRecording(true)} style={recordButtonStyle}>
+                <Button
+                  bsStyle={ this.state.audio ? 'warning' : 'primary' }
+                  onClick={() => this.startRecording(false)} style={recordButtonStyle}>
                   <i className="fa fa-microphone"/>
                   {' '}
-                  New recording
+                  { this.state.audio ? 'Replace recording' : 'New recording' }
                 </Button>
               )
               : (
-                <Button bsStyle="primary" onClick={this.stopRecording} style={recordButtonStyle}>
+                <Button bsStyle="warning" onClick={this.stopRecording} style={recordButtonStyle}>
                   <i className="fa fa-microphone-slash"/>
                   {' '}
                   Stop recording
                 </Button>
               )
             }
+              <Button bsStyle="primary" onClick={this.play} disabled={this.state.isPlaying || !this.state.audio}
+                      style={{ marginBottom: '1ex' }}>
+                <i className="fa fa-play"/>
+                Play
+              </Button>
+            </ButtonGroup>
           </Col>
         </Row>
+        <form>
+          <Row className="show-grid">
+            <Col xs={0} md={1}/>
+            <Col xs={12} md={8}>
+              <FormGroup controlId="name">
+                <ControlLabel>Name</ControlLabel>
+                <FormControl type="text" value={this.state.name} placeholder="E.g. A#, A#-Bb, …" onChange={this.setName}/>
+              </FormGroup>
 
-        {this.state.audio
-        && (
-          <React.Fragment>
-            <Row className="show-grid">
-              <Col xs={0} md={2}/>
-              <Col xs={12} md={8}>
-                <ButtonGroup>
-                <Button bsStyle="primary" onClick={this.play} disabled={this.state.isPlaying}
-                style={{ marginBottom: '1ex' }}>
-                  <i className="fa fa-play"/>
-                  Play
-                </Button>
-                {!this.state.isRecording
-                  ? (
-                    <Button bsStyle="warning" onClick={() => this.startRecording(false)} style={recordButtonStyle}>
-                      <i className="fa fa-microphone"/>
-                      {' '}
-                      Replace recording
-                    </Button>
-                  )
-                  : (
-                    <Button bsStyle="warning" onClick={this.stopRecording} style={recordButtonStyle}>
-                      <i className="fa fa-microphone-slash"/>
-                      {' '}
-                      Stop recording
-                    </Button>
-                  )
-                }
-                </ButtonGroup>
-              </Col>
-            </Row>
-            <form>
-              <Row className="show-grid">
-                <Col xs={0} md={2}/>
-                <Col xs={12} md={8}>
-                  <FormGroup controlId="name">
-                    <ControlLabel>Name</ControlLabel>
-                    <FormControl type="text" value={this.state.name} placeholder="E.g. A#, A#-Bb, …" onChange={this.setName}/>
-                  </FormGroup>
-                  <ButtonToolbar>
-                    <ToggleButtonGroup type="radio" name="type" value={this.state.type} onChange={this.setType}>
-                      {[['note', 'Note'], ['chord', 'Chord'], ['strumming_pattern', 'Strumming pattern']].map(([tp, desc]) => (
-                        <ToggleButton key={tp} value={tp}>{desc}</ToggleButton>
-                      ))}
-                    </ToggleButtonGroup>
-                  </ButtonToolbar>
-                  <FormGroup>
-
-                  </FormGroup>
-
-                  <Button type="submit" disabled={!isValid} onClick={this.save}>Save</Button>
-                </Col>
-              </Row>
-            </form>
-          </React.Fragment>
-        )}
+              <Button type="submit" disabled={!isValid} onClick={this.save}>{this.state.id ? 'Update' : 'Create'}</Button>
+            </Col>
+          </Row>
+        </form>
       </React.Fragment>
     );
   }
@@ -285,11 +289,6 @@ export default class Record extends React.PureComponent {
   }
 
   @autobind
-  setType(type: 'chord' | 'note' | 'strumming_pattern') {
-    this.setState({ type });
-  }
-
-  @autobind
   setName(evt) {
     this.setState({ name: evt.target.value.trim() });
   }
@@ -310,7 +309,7 @@ export default class Record extends React.PureComponent {
       body: data
     });
     const json = await res.json();
-    this.id = json.id;
+    this.setState({ id: json.id });
     this.updateItem({
       type: this.state.type,
       name: this.state.name.trim(),
