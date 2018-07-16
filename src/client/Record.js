@@ -18,14 +18,15 @@ import {
   PageHeader,
   Panel,
   Row,
-  Tab, Tabs,
+  Tab, Tabs, Nav, NavItem,
   ToggleButton,
   ToggleButtonGroup,
 } from 'react-bootstrap';
+import { withRouter } from 'react-router';
 
 
 type ItemType = {
-  id: number,
+  id?: number,
   name: string
 };
 
@@ -35,30 +36,33 @@ function itemCmp(it1, it2) {
 }
 
 
-export default class Record extends React.PureComponent {
+@withRouter
+class Record extends React.PureComponent {
   static displayName = 'Record';
 
+  props: {
+    type: 'chord' | 'note' | 'strumming_pattern'
+  };
+
   state: {
+    id: ?number,
     audioBlob: ?Blob,
     audioURL: ?URL,
     mediaRecorder: ?MediaStream,
     audio: HTMLAudioElement,
     isRecording: boolean,
     isPlaying: boolean,
-    type: 'chord' | 'note' | 'strumming_pattern'
+    items: ItemType[]
   };
 
-  constructor() {
+  constructor(props) {
     super(...arguments);
     this.state = {
       id: null,
       name: '',
-      type: 'chord',
       isPlaying: false,
       isRecording: false,
-      chords: [],
-      notes: [],
-      strummingPatterns: []
+      items: [],
     };
     navigator.mediaDevices.getUserMedia({ audio: true, video: false })
       .then((stream) => {
@@ -67,73 +71,55 @@ export default class Record extends React.PureComponent {
         });
       });
 
-    fetch('/api/chord/list').then(async (response) => this.setState({ chords: (await response.json()).sort(itemCmp) }));
-    fetch('/api/note/list').then(async (response) => this.setState({ notes: (await response.json()).sort(itemCmp) }));
-    fetch('/api/strumming_pattern/list').then(async (response) => this.setState({ strumming_patterns: (await response.json()).sort(itemCmp) }));
-  }
-
-  @autobind
-  setType(tp: 'chord' | 'note' | 'strumming_pattern') {
-    if (tp === this.state.type) {
-      return;
-    }
-
-    if (this.state.audioURL) {
-      URL.revokeObjectURL(this.state.audioURL);
-    }
-    this.setState({
-      id: null,
-      type: tp,
-      name: '',
-      audio: null,
-      audioURL: null,
-      audioBlob: null
-    });
+    fetch(`/api/${props.type}/list`)
+      .then(async (response) => this.setState({ items: (await response.json()).sort(itemCmp) }));
   }
 
   render() {
-    console.log(this.state);
     return (
-      <Grid>
+      <React.Fragment>
         <Row className="show-grid">
           <Col md={12}><PageHeader>Recording</PageHeader></Col>
         </Row>
         <Row className="show-grid">
           <Col md={12}>{this.renderItems()}</Col>
         </Row>
-      </Grid>
+      </React.Fragment>
     );
   }
 
   renderItems() {
     return (
-      <Tabs
-        activeKey={this.state.type}
-        onSelect={this.setType}>
-        {[['chord', 'Chords'], ['note', 'Notes'], ['strummingPattern', 'Strumming patterns']].map(([tp, desc]) => (
-          <Tab key={tp} eventKey={tp} title={desc} className="form-tabs">
-            <Col md={3}>
-              <ListGroup>
-                <ListGroupItem onClick={() => this.selectItem(tp, null)} active={!this.state.id}>
-                  <i className="fa fa-plus"/>
+      <React.Fragment>
+        <Row>
+          <Nav bsStyle="tabs" activeHref={`/record/${this.props.type}`}>
+          {[['chord', 'Chords'], ['note', 'Notes'], ['strumming_pattern', 'Strumming patterns']].map(([tp, desc]) => (
+            <NavItem href={`/record/${tp}`}>{desc}</NavItem>
+          ))}
+          </Nav>
+        </Row>
+        <Row style={{ paddingTop: '2ex' }}>
+          <Col md={3} xs={12}>
+            <ListGroup>
+              <ListGroupItem onClick={() => this.selectItem(null)} active={!this.state.id}>
+                <i className="fa fa-plus"/>
+              </ListGroupItem>
+              {this.state.items.map((item) => (
+                <ListGroupItem key={item.id} onClick={() => this.selectItem(item)} active={item.id === this.state.id}>
+                  {item.name}
                 </ListGroupItem>
-                {this.state[`${tp}s`].map((item) => (
-                  <ListGroupItem key={item.id} onClick={() => this.selectItem(tp, item)} active={item.id === this.state.id}>
-                    {item.name}
-                  </ListGroupItem>
-                ))}
-              </ListGroup>
-            </Col>
-            <Col md={9}>
-              { tp === this.state.type && this.renderForm() }
-            </Col>
-          </Tab>
-        ))}
-      </Tabs>
+              ))}
+            </ListGroup>
+          </Col>
+          <Col md={9} xs={12}>
+            { this.renderForm() }
+          </Col>
+        </Row>
+      </React.Fragment>
     );
   }
 
-  async selectItem(tp, item) {
+  async selectItem(item) {
     if (this.state.audioURL) {
       URL.revokeObjectURL(this.state.audioURL);
     }
@@ -141,7 +127,6 @@ export default class Record extends React.PureComponent {
     if (!item) {
       this.setState({
         id: null,
-        type: tp,
         name: '',
         audio: null,
         audioURL: null,
@@ -152,14 +137,13 @@ export default class Record extends React.PureComponent {
 
     this.setState({
       id: item.id,
-      type: tp,
       name: item.name,
       audio: null,
       audioURL: null,
       audioBlob: null
     });
 
-    const response = await fetch(`/api/${tp}/${item.id}`);
+    const response = await fetch(`/api/${this.props.type}/${item.id}`);
     const json = await response.json();
     const buf = Buffer.from(json.data, 'hex');
     console.log({ buf });
@@ -176,22 +160,18 @@ export default class Record extends React.PureComponent {
 
   renderForm() {
     if (!this.state.mediaRecorder) {
-      return (
-        <div>
-          Initializing…
-        </div>
-      );
+      return null;
     }
 
     const isValid = (
       this.state.name.length > 0 &&
       this.state.audioBlob &&
-      this.state.type
+      this.props.type
     );
     const recordButtonStyle = {width: '15em', marginBottom: '1ex'};
     return (
       <React.Fragment>
-        <Row className="show-grid">
+        <Row>
           <Col xs={0} md={1}/>
           <Col xs={12} md={8}>
             <ButtonGroup>
@@ -290,7 +270,7 @@ export default class Record extends React.PureComponent {
 
   @autobind
   setName(evt) {
-    this.setState({ name: evt.target.value.trim() });
+    this.setState({ name: evt.target.value });
   }
 
   @autobind
@@ -300,27 +280,31 @@ export default class Record extends React.PureComponent {
       throw new Error('No audio to save');
     }
 
+    const name = this.state.name.trim().replace(/\s+/g, ' ');
     const data = new FormData();
-    data.append('name', this.state.name.trim());
+    data.append('name', name);
     data.append('data', this.state.audioBlob);
-    console.log('Save blob', this.state.audioBlob);
-    const res = await fetch(`/api/${this.state.type}`, {
+    if (this.state.id) {
+      data.append('id', this.state.id);
+    }
+
+    const res = await fetch(`/api/${this.props.type}${ this.state.id ? `/${this.state.id}` : '' }`, {
       method: 'POST',
       body: data
     });
+
     const json = await res.json();
     this.setState({ id: json.id });
-    this.updateItem({
-      type: this.state.type,
-      name: this.state.name.trim(),
-      id: json.id
-    });
+    this.updateItem({ name, id: json.id });
   }
 
-  updateItem({ type, name, id }) {
-    const items = this.state[`${type}s`].filter(({ id: itemId }) => itemId !== id);
+  updateItem({ name, id }) {
+    console.log('updateItem', { name, id });
+    const items = this.state.items.filter((it) => `${it.id}` !== `${id}`);
     items.push({ id, name });
     items.sort((i1, i2) => i1.name < i2.name ? -1 : +1);
-    this.setState({ [`${type}s`]: items });
+    this.setState({ items });
   }
 }
+
+export default Record;
