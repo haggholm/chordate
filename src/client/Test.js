@@ -78,11 +78,14 @@ class Test extends PureComponent {
   renderChecklist() {
     return (
       <form>
-        <FormGroup>
+        <ListGroup>
           {this.state.items.map((item) => (
-            <Checkbox checked={item.checked} onClick={() => this.toggleChecked(item)}>{item.name}</Checkbox>
+            <ListGroupItem bsStyle={ item.checked && 'success' } onClick={() => this.toggleChecked(item)}>
+              { item.checked ? <i className="fa fa-check-square-o pull-left"/> : <i className="fa fa-square-o pull-left"/> }
+              { item.name }
+            </ListGroupItem>
           ))}
-        </FormGroup>
+        </ListGroup>
         <FormGroup>
           <ButtonGroup>
             <Button disabled>Start test</Button>
