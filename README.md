@@ -115,7 +115,7 @@ const CleanWebpackPlugin = require("clean-webpack-plugin");
 const outputDirectory = "dist";
 
 module.exports = {
-  entry: "./src/client/index.js",
+  entry: index.tsx,
   output: {
     path: path.join(__dirname, outputDirectory),
     filename: "bundle.js"
@@ -194,7 +194,7 @@ Here, we tell nodemon to watch the files in the directory src/server where out s
 
 Express is a web application framework for Node.js. It is used to build our backend API's.
 
-src/server/index.js is the entry point to the server application. Below is the src/server/index.js file
+src/server/index.tsx is the entry point to the server application. Below is the src/server/index.tsx file
 
 ```javascript
 const express = require("express");
@@ -217,8 +217,8 @@ This starts a server and listens on port 8080 for connections. The app responds 
 
 ```javascript
 "client": "webpack-dev-server --mode development --devtool inline-source-map --hot",
-"server": "nodemon src/server/index.js",
-"dev": "concurrently \"npm run server\" \"npm run client\""
+"server": index.tsx,
+"dev": "cindex.tsxtly \"npm run server\" \"npm run client\""
 ```
 
 ### VSCode + ESLint + Prettier
