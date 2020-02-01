@@ -6,3 +6,8 @@ database.sqlite
 uploads
 .idea
 src/**/*.js
+src/**/*.jsx
+src/**/*.d.ts
+src/**/*.map
+
+.idea

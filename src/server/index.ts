@@ -2,15 +2,16 @@
 /* tslint:disable:no-console */
 
 import { Buffer } from 'buffer';
-import express from 'express';
+import express, { Express, Request, Response } from 'express';
 import multer from 'multer';
 import * as path from 'path';
-import sqlite from 'sqlite';
+import sqlite, { Database } from 'sqlite';
+
 import { SoundType } from '../lib/interfaces';
 
 const upload = multer({ storage: multer.memoryStorage() });
 
-async function initDB() {
+async function initDB(): Promise<Database> {
 	console.log('Initialize db...');
 	const db = await sqlite.open('./database.sqlite', {
 		promise: Promise,
@@ -20,7 +21,7 @@ async function initDB() {
 	return db;
 }
 
-function safe<T extends Function>(fn: T): T {
+function safe<T extends (...args: any[]) => any>(fn: T): T {
 	return ((async (req, res) => {
 		try {
 			await fn(req, res);
@@ -33,10 +34,10 @@ function safe<T extends Function>(fn: T): T {
 }
 
 async function main() {
-	const db = await initDB();
+	const db: Database = await initDB();
 
 	console.log('Initialize app...');
-	const app = express();
+	const app: Express = express();
 
 	app.use(express.static('dist'));
 
@@ -74,7 +75,10 @@ async function main() {
 		// "[object Object]"
 		const { data: readData } = await db.get(
 			`SELECT data FROM items WHERE type = $tp AND id = $id`,
-			{ $tp: tp, $id: id }
+			{
+				$tp: tp,
+				$id: id,
+			}
 		);
 		if (!Buffer.isBuffer(readData)) {
 			await db.run(`DELETE FROM ${tp}s WHERE id = $id`, { $id: id });
@@ -86,8 +90,11 @@ async function main() {
 
 	app.get(
 		`/api/:tp/list`,
-		safe(async (req, res) => {
-			const data = await db.all('SELECT id, name FROM items WHERE type=$tp', {
+		safe(async (req: Request, res: Response) => {
+			const data: {
+				id: string;
+				name: string;
+			}[] = await db.all('SELECT id, name FROM items WHERE type = $tp', {
 				$tp: req.params.tp,
 			});
 			console.log(`List ${req.params.tp}s:`, data);
@@ -97,19 +104,24 @@ async function main() {
 
 	app.get(
 		`/api/:tp/:id`,
-		safe(async (req, res) => {
+		safe(async (req: Request, res: Response) => {
 			console.log(`Get ${req.params.tp} ${req.params.id}`);
-			const { id, name, data } = await db.get(
+			const {
+				id,
+				name,
+				data,
+			} = await db.get(
 				'SELECT id, name, data FROM items WHERE type = $tp AND id = $id',
 				{ $tp: req.params.tp, $id: Number(req.params.id) }
 			);
+			res.status(200);
 			res.json({ id: Number(id), name, data: data.toString('hex') });
 		})
 	);
 
 	app.delete(
 		`/api/:tp/:id`,
-		safe(async (req, res) => {
+		safe(async (req: Request, res: Response) => {
 			console.log(`Delete ${req.params.tp} ${req.params.id}`);
 			await db.run('DELETE FROM items WHERE type = $tp AND id = $id', {
 				$tp: req.params.tp,
@@ -122,7 +134,7 @@ async function main() {
 	app.post(
 		`/api/:tp/:id`,
 		upload.single('data'),
-		safe(async (req, res) => {
+		safe(async (req: Request, res: Response) => {
 			const id = Number(req.params.id);
 			if (isNaN(id)) {
 				throw new Error('Invalid id');
@@ -141,7 +153,7 @@ async function main() {
 	app.post(
 		`/api/:tp`,
 		upload.single('data'),
-		safe(async (req, res) => {
+		safe(async (req: Request, res: Response) => {
 			const name = req.body.name;
 			const data = req.file.buffer;
 			if (!Buffer.isBuffer(data)) {
@@ -162,7 +174,7 @@ async function main() {
 		})
 	);
 
-	app.get('*', (req, res) => {
+	app.get('*', (req: Request, res: Response) => {
 		console.log(req);
 		res.sendFile('public/index.html');
 	});
