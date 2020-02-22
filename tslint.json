@@ -74,9 +74,7 @@
     "no-bitwise": {
       "severity": "warn"
     },
-    "no-console": {
-      "severity": "error"
-    },
+    "no-console": false,
     "no-debugger": {
       "severity": "warn"
     },

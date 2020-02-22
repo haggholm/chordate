@@ -10,4 +10,8 @@ src/**/*.jsx
 src/**/*.d.ts
 src/**/*.map
 
+chordate-linux-x64
+chordate-win32-x64
 .idea
+webpack.js
+webpack.js.map

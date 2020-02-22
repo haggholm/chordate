@@ -10,6 +10,7 @@ import 'bootstrap/dist/css/bootstrap.min.css';
 import 'font-awesome/fonts/fontawesome-webfont.woff2';
 // tslint:disable-next-line:no-import-side-effect
 import 'font-awesome/scss/font-awesome.scss';
+
 // tslint:disable-next-line:no-import-side-effect
 import './app.scss';
 
@@ -18,35 +19,32 @@ import Record from './Record';
 import Test from './Test';
 
 export default class App extends Component {
-	constructor(props) {
-		super(props);
-		this.state = {};
-		// fetch('/api/getUsername')
-		//   .then(res => res.json())
-		//   .then(user => this.setState({ username: user.username }));
-	}
+  constructor(props) {
+    super(props);
+    this.state = {};
+  }
 
-	public render() {
-		return (
-			<Router>
-				<Container>
-					<Switch>
-						<Route
-							path="/record/:type"
-							render={(props) => (
-								<Record type={props.match.params.type} {...props} />
-							)}
-						/>
-						<Route
-							path="/test/:type"
-							render={(props) => (
-								<Test type={props.match.params.type} {...props} />
-							)}
-						/>
-						<Route render={(/*{props}*/) => <ChoiceScreen />} />
-					</Switch>
-				</Container>
-			</Router>
-		);
-	}
+  public render() {
+    return (
+      <Router>
+        <Container>
+          <Switch>
+            <Route
+              path="/record/:type"
+              render={(props) => (
+                <Record type={props.match.params.type} {...props} />
+              )}
+            />
+            <Route
+              path="/test/:type"
+              render={(props) => (
+                <Test type={props.match.params.type} {...props} />
+              )}
+            />
+            <Route render={(/*{props}*/) => <ChoiceScreen />} />
+          </Switch>
+        </Container>
+      </Router>
+    );
+  }
 }
