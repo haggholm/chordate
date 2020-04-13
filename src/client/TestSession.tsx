@@ -1,3 +1,4 @@
+import * as path from 'path';
 import { autobind } from 'core-decorators';
 import _ from 'lodash';
 import { PureComponent } from 'react';
@@ -81,8 +82,26 @@ export default class TestSession extends PureComponent<
       throw new Error('No current item available');
     }
 
-    const buf = await fs.readFile(`${props.type}/${this.state.currentItem.id}`);
-    const audioBlob = new Blob([buf], { type: 'audio/webm' });
+    // const buf = await fs.readFile(`${props.type}/${this.state.currentItem.id}`);
+    const buf = await fs.readFile(
+      `/home/petter/projects/chordate/clips/${this.state.currentItem.id}`
+    );
+
+    let type;
+    switch (path.extname(this.state.currentItem.id as string).toLowerCase()) {
+      case '.aif':
+        type = 'audio/x-aiff';
+        break;
+      case '.ogg':
+        type = 'audio/ogg';
+        break;
+      case '.webm':
+        type = 'audio/webm';
+        break;
+      default:
+        throw new Error('Unsupported audio type');
+    }
+    const audioBlob = new Blob([buf], { type });
     const audioURL = URL.createObjectURL(audioBlob);
 
     this.setState({

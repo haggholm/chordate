@@ -1,16 +1,16 @@
 export enum TestType {
-  MULTIPLE = 'multiple-choice',
-  ENTRY = 'text-entry',
+  MultipleChoice = 'multiple-choice',
+  Entry = 'text-entry',
 }
 
 export enum SoundType {
-  CHORD = 'chord',
-  NOTE = 'note',
-  PATTERN = 'strumming_pattern',
+  Chord = 'chord',
+  Note = 'note',
+  Pattern = 'strumming_pattern',
 }
 
 export interface SoundItem {
-  id?: number|string;
+  id?: number | string;
   type: SoundType;
   name: string;
 }

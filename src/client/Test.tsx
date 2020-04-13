@@ -1,5 +1,4 @@
-/* @flow */
-
+import { chunk } from 'lodash';
 import React, { PureComponent } from 'react';
 import { LinkContainer } from 'react-router-bootstrap';
 import {
@@ -7,13 +6,16 @@ import {
   ButtonGroup,
   Col,
   Container,
+  Form,
   FormGroup,
   ListGroup,
   ListGroupItem,
   Nav,
   Row,
 } from 'react-bootstrap';
-import { Link, withRouter } from 'react-router-dom';
+import { withRouter } from 'react-router-dom';
+import * as fs from 'fs-extra';
+import * as path from 'path';
 
 import { SoundItem, SoundType, TestType } from '../lib/interfaces';
 import TestSession from './TestSession';
@@ -37,12 +39,21 @@ class Test extends PureComponent<TestProps, TestState> {
     super(props);
     this.state = {
       mode: 'setup',
-      testType: TestType.MULTIPLE,
+      testType: TestType.MultipleChoice,
       items: null,
       selectedItems: [],
     };
-    fetch(`/api/${props.type}/list`).then(async (response) =>
-      this.setState({ items: (await response.json()).sort(itemCmp) })
+
+    fs.readdir(`/home/petter/projects/chordate/clips`).then((files) =>
+      this.setState({
+        items: files.map((f) => ({
+          id: f,
+          type: SoundType.Note,
+          name: path
+            .basename(f)
+            .substr(0, path.basename(f).length - path.extname(f).length),
+        })),
+      })
     );
   }
 
@@ -57,12 +68,12 @@ class Test extends PureComponent<TestProps, TestState> {
         <Row>
           <Nav variant="tabs" activeKey={`/test/${this.props.type}`}>
             {[
-              [SoundType.CHORD, 'Chords'],
-              [SoundType.NOTE, 'Notes'],
-              [SoundType.PATTERN, 'Strumming patterns'],
+              [SoundType.Chord, 'Chords'],
+              [SoundType.Note, 'Notes'],
+              [SoundType.Pattern, 'Strumming patterns'],
             ].map(([tp, desc]) => (
-              <Nav.Item>
-                <LinkContainer key={tp} to={`/test/${tp}`}>
+              <Nav.Item key={tp}>
+                <LinkContainer to={`/test/${tp}`}>
                   <Nav.Link href={`/test/${tp}`}>{desc}</Nav.Link>
                 </LinkContainer>
               </Nav.Item>
@@ -88,54 +99,70 @@ class Test extends PureComponent<TestProps, TestState> {
 
   public renderChecklist() {
     return (
-      <form>
-        <ListGroup>
-          {!this.state.items && (
-            <ListGroupItem disabled={true}>No items</ListGroupItem>
-          )}
-          {(this.state.items || []).map((item) => (
-            <ListGroupItem
-              key={item.name}
-              variant={item.checked ? 'success' : 'info'}
-              onClick={() => this.toggleChecked(item)}
-            >
-              {item.checked ? (
-                <i className="fa fa-check-square-o pull-left" />
-              ) : (
-                <i className="fa fa-square-o pull-left" />
-              )}
-              {item.name}
-            </ListGroupItem>
+      <Form>
+        {!this.state.items && (
+          <ListGroupItem disabled={true}>No items</ListGroupItem>
+        )}
+        <Form.Row>
+          {chunk(
+            this.state.items ?? [],
+            Math.ceil((this.state.items ?? []).length / 3)
+          ).map((items, idx) => (
+            <Col key={idx}>
+              <ListGroup>
+                {items.map((item) => (
+                  <ListGroupItem
+                    key={item.name}
+                    active={item.checked}
+                    onClick={() => this.toggleChecked(item)}
+                  >
+                    {item.checked ? (
+                      <i className="fa fa-check-square-o pull-left" />
+                    ) : (
+                      <i className="fa fa-square-o pull-left" />
+                    )}
+                    {item.name}
+                  </ListGroupItem>
+                ))}
+              </ListGroup>
+            </Col>
           ))}
-        </ListGroup>
-        <FormGroup>
-          <ButtonGroup>
-            <Button disabled={true}>Start test</Button>
-            <Button
-              variant="primary"
-              type="submit"
-              disabled={
-                (this.state.items || []).filter(({ checked }) => checked)
-                  .length < 2
-              }
-              onClick={() => this.start(TestType.MULTIPLE)}
-            >
-              Multiple choice
-            </Button>
-            <Button
-              variant="primary"
-              type="submit"
-              disabled={
-                (this.state.items || []).filter(({ checked }) => checked)
-                  .length < 2
-              }
-              onClick={() => this.start(TestType.ENTRY)}
-            >
-              Type answers
-            </Button>
-          </ButtonGroup>
-        </FormGroup>
-      </form>
+        </Form.Row>
+        <br />
+        <Form.Row>
+          <Col md={3} />
+          <Col md="auto">
+            <FormGroup>
+              <ButtonGroup>
+                <Button disabled={true}>Start test</Button>
+                <Button
+                  variant="primary"
+                  type="submit"
+                  disabled={
+                    (this.state.items || []).filter(({ checked }) => checked)
+                      .length < 2
+                  }
+                  onClick={() => this.start(TestType.MultipleChoice)}
+                >
+                  Multiple choice
+                </Button>
+                <Button
+                  variant="primary"
+                  type="submit"
+                  disabled={
+                    (this.state.items || []).filter(({ checked }) => checked)
+                      .length < 2
+                  }
+                  onClick={() => this.start(TestType.Entry)}
+                >
+                  Type answers
+                </Button>
+              </ButtonGroup>
+            </FormGroup>
+          </Col>
+          <Col md={3} />
+        </Form.Row>
+      </Form>
     );
   }
 

@@ -93,9 +93,9 @@ class Record extends React.PureComponent<
         <Row>
           <Nav variant="tabs" activeKey={`/record/${this.props.type}`}>
             {[
-              [SoundType.CHORD, 'Chords'],
-              [SoundType.NOTE, 'Notes'],
-              [SoundType.PATTERN, 'Strumming patterns'],
+              [SoundType.Chord, 'Chords'],
+              [SoundType.Note, 'Notes'],
+              [SoundType.Pattern, 'Strumming patterns'],
             ].map(([tp, desc]) => (
               <Nav.Item key={tp}>
                 <Nav.Link href={`/record/${tp}`}>{desc}</Nav.Link>

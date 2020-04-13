@@ -1,6 +1,11 @@
 import React, { Component } from 'react';
 import { Container } from 'react-bootstrap';
-import { MemoryRouter as Router, Route, Switch } from 'react-router-dom';
+import {
+  MemoryRouter as Router,
+  Redirect,
+  Route,
+  Switch,
+} from 'react-router-dom';
 
 import 'bootstrap/dist/css/bootstrap.min.css';
 import 'font-awesome/fonts/fontawesome-webfont.woff2';
@@ -35,10 +40,12 @@ export default class App extends Component {
                 <Test type={props.match.params.type} {...props} />
               )}
             />
-            <Route render={(/*{props}*/) => <ChoiceScreen />} />
+            <Route render={(/* props */) => <Redirect to="/test/chord" />} />
           </Switch>
         </Container>
       </Router>
     );
+
+    // <Route render={(/*{props}*/) => <ChoiceScreen />} />
   }
 }
