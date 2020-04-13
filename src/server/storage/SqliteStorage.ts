@@ -9,10 +9,10 @@ export default class SqliteStorage implements IStorage {
 
   async init() {
     console.log('Initialize db...');
-    this.db = await sqlite.open('./database.sqlite', {
-      promise: Promise,
-      cached: false,
-    });
+    // this.db = await sqlite.open('./database.sqlite', {
+    //   promise: Promise,
+    //   cached: false,
+    // });
     await this.db.migrate({ migrationsPath: path.resolve(__dirname, 'db') });
   }
 

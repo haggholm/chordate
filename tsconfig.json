@@ -9,18 +9,15 @@
     "emitDecoratorMetadata": true,
     "jsx": "react",
     "lib": [
-      "es2015",
-      "es2016",
-      "scripthost",
-      "es2017",
-      "es2018",
-      "esnext",
-      "dom"
+      "ScriptHost",
+      "ESNext",
+      "DOM"
     ],
-    "target": "es2018",
-    "moduleResolution": "node",
+    "target": "ES2018",
+    "moduleResolution": "Node",
     "rootDir": "src",
-    "module": "commonjs",
+    "module": "ES6",
     "sourceMap": true
-  }
+  },
+  "include": ["src/**/*.ts","src/**/*.tsx"]
 }

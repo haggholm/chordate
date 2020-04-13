@@ -1,12 +1,13 @@
-import path from 'path';
+import * as path from 'path';
 
 import Webpack from 'webpack';
 import HtmlWebpackPlugin from 'html-webpack-plugin';
 import TerserPlugin from 'terser-webpack-plugin';
-import PNPWebpackPlugin from 'pnp-webpack-plugin';
+// import PNPWebpackPlugin from 'pnp-webpack-plugin';
 import ForkTsCheckerWebpackPlugin from 'fork-ts-checker-webpack-plugin';
-import nodeExternals from 'webpack-node-externals';
+// import nodeExternals from 'webpack-node-externals';
 
+import 'babel-loader';
 import 'ts-loader';
 import 'cache-loader';
 import 'brfs';
@@ -23,16 +24,16 @@ const mainConfig: Webpack.Configuration = {
   },
   cache: true,
   resolve: {
-    plugins: [PNPWebpackPlugin],
+    // plugins: [PNPWebpackPlugin],
     extensions: ['.ts', '.js', '.json'],
   },
-  resolveLoader: { plugins: [PNPWebpackPlugin.moduleLoader(module)] },
+  // resolveLoader: { plugins: [PNPWebpackPlugin.moduleLoader(module)] },
   module: {
     rules: [
       {
         test: /\.ts$/i,
         include: /src/,
-        use: ['cache-loader', 'ts-loader'],
+        use: ['cache-loader', 'babel-loader' /*'ts-loader'*/],
       },
 
       // https://stackoverflow.com/a/34407395
@@ -41,7 +42,7 @@ const mainConfig: Webpack.Configuration = {
     ],
   },
   plugins: [new ForkTsCheckerWebpackPlugin()],
-  externals: [nodeExternals()],
+  // externals: [nodeExternals()],
   // externals: ['aws-sdk'],
   node: {
     __dirname: false, // Otherwise (?!) __dirname → /
@@ -49,10 +50,11 @@ const mainConfig: Webpack.Configuration = {
 };
 
 const renderConfig: Webpack.Configuration = {
-  entry: './src/client/index.tsx',
+  entry: './src/client.tsx',
   target: 'electron-renderer',
+  // externals: [nodeExternals()],
   output: {
-    path: path.join(__dirname, 'dist'),
+    path: path.join(__dirname, 'src'),
     filename: 'client.js',
   },
   cache: true,
@@ -76,16 +78,16 @@ const renderConfig: Webpack.Configuration = {
     ],
   },
   resolve: {
-    plugins: [PNPWebpackPlugin],
+    // plugins: [PNPWebpackPlugin],
     extensions: ['.tsx', '.ts', '.js', '.json'],
   },
-  resolveLoader: { plugins: [PNPWebpackPlugin.moduleLoader(module)] },
+  // resolveLoader: { plugins: [PNPWebpackPlugin.moduleLoader(module)] },
   module: {
     rules: [
       {
         test: /\.tsx?$/i,
         exclude: /node_modules/,
-        use: ['cache-loader', 'ts-loader'],
+        use: ['cache-loader', 'babel-loader' /*'ts-loader'*/],
       },
       {
         test: /\.scss$/,

@@ -14,6 +14,8 @@ import {
   ProgressBar,
   Row,
 } from 'react-bootstrap';
+import * as fs from 'fs-extra';
+
 import { SoundItem, SoundType, TestType } from '../lib/interfaces';
 
 interface TestSessionProps {
@@ -79,11 +81,7 @@ export default class TestSession extends PureComponent<
       throw new Error('No current item available');
     }
 
-    const response = await fetch(
-      `/api/${props.type}/${this.state.currentItem.id}`
-    );
-    const json = await response.json();
-    const buf = Buffer.from(json.data, 'hex');
+    const buf = await fs.readFile(`${props.type}/${this.state.currentItem.id}`);
     const audioBlob = new Blob([buf], { type: 'audio/webm' });
     const audioURL = URL.createObjectURL(audioBlob);
 
@@ -232,7 +230,10 @@ export default class TestSession extends PureComponent<
       showModal: true,
       lastAnswerCorrect: correct,
     });
-    this.closeModalTimeout = setTimeout(this.closeModal, 3000);
+    this.closeModalTimeout = setTimeout(
+      this.closeModal,
+      3000
+    ) as NodeJS.Timeout;
   }
 
   @autobind
