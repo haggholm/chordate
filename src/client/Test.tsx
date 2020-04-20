@@ -1,3 +1,6 @@
+import { remote } from 'electron';
+const app = remote.app;
+
 import { chunk } from 'lodash';
 import React, { PureComponent } from 'react';
 import { LinkContainer } from 'react-router-bootstrap';
@@ -44,17 +47,22 @@ class Test extends PureComponent<TestProps, TestState> {
       selectedItems: [],
     };
 
-    fs.readdir(`/home/petter/projects/chordate/clips`).then((files) =>
-      this.setState({
-        items: files.map((f) => ({
-          id: f,
-          type: SoundType.Note,
-          name: path
-            .basename(f)
-            .substr(0, path.basename(f).length - path.extname(f).length),
-        })),
-      })
-    );
+    const clipPath = path.join(app.getPath('userData'), 'clips');
+    if (!fs.pathExistsSync(clipPath) || fs.readdirSync(clipPath).length === 0) {
+      alert('Expected to find clips in ' + clipPath);
+    } else {
+      fs.readdir(clipPath).then((files) =>
+        this.setState({
+          items: files.map((f) => ({
+            id: f,
+            type: SoundType.Note,
+            name: path
+              .basename(f)
+              .substr(0, path.basename(f).length - path.extname(f).length),
+          })),
+        })
+      );
+    }
   }
 
   public render() {

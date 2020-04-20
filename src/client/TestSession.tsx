@@ -1,3 +1,6 @@
+import { remote } from 'electron';
+const app = remote.app;
+
 import * as path from 'path';
 import { autobind } from 'core-decorators';
 import _ from 'lodash';
@@ -84,7 +87,11 @@ export default class TestSession extends PureComponent<
 
     // const buf = await fs.readFile(`${props.type}/${this.state.currentItem.id}`);
     const buf = await fs.readFile(
-      `/home/petter/projects/chordate/clips/${this.state.currentItem.id}`
+      path.join(
+        app.getPath('userData'),
+        'clips',
+        this.state.currentItem.id as string
+      )
     );
 
     let type;
