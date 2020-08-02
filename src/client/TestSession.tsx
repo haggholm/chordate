@@ -40,6 +40,19 @@ interface TestSessionState {
   audioURL?: string;
   audio?: HTMLAudioElement;
   showModal: boolean;
+  stats: {
+    [SoundType.Chord]: Stats;
+    [SoundType.Note]: Stats;
+    [SoundType.Pattern]: Stats;
+  };
+}
+
+interface Stats {
+  guesses: Array<{
+    answer: { id: number | string } | { answer: string };
+    correct: boolean;
+    timestamp: string;
+  }>;
 }
 
 export default class TestSession extends PureComponent<
@@ -47,9 +60,11 @@ export default class TestSession extends PureComponent<
   TestSessionState
 > {
   private closeModalTimeout: NodeJS.Timeout;
+  private statsPath;
 
   constructor(props) {
     super(props);
+    this.statsPath = path.join(app.getPath('userData'), 'stats.json');
     this.state = {
       answered: 0,
       right: 0,
@@ -62,6 +77,13 @@ export default class TestSession extends PureComponent<
       audioURL: null,
       audio: null,
       showModal: false,
+      stats: fs.pathExistsSync(this.statsPath)
+        ? fs.readJSONSync(this.statsPath)
+        : {
+            [SoundType.Chord]: { guesses: [] },
+            [SoundType.Note]: { guesses: [] },
+            [SoundType.Pattern]: { guesses: [] },
+          },
     };
 
     this.loadCurrentItem(props);
@@ -85,11 +107,11 @@ export default class TestSession extends PureComponent<
       throw new Error('No current item available');
     }
 
-    // const buf = await fs.readFile(`${props.type}/${this.state.currentItem.id}`);
     const buf = await fs.readFile(
       path.join(
         app.getPath('userData'),
         'clips',
+        this.props.type,
         this.state.currentItem.id as string
       )
     );
@@ -252,10 +274,24 @@ export default class TestSession extends PureComponent<
       correct = fmt(a.answer) === fmt(currentItem.name);
     }
 
+    const curStats = this.state.stats;
+    const stats = {
+      ...curStats,
+      [this.props.type]: {
+        ...curStats[this.props.type],
+        guesses: [
+          ...curStats[this.props.type].guesses,
+          { answer, correct, timestamp: new Date().toISOString() },
+        ],
+      },
+    };
+
     this.setState({
       showModal: true,
       lastAnswerCorrect: correct,
+      stats,
     });
+    fs.writeJSON(this.statsPath, stats).then(null);
     this.closeModalTimeout = setTimeout(
       this.closeModal,
       3000
@@ -314,8 +350,10 @@ export default class TestSession extends PureComponent<
         size="sm"
       >
         <Modal.Body>
-          <Card bg={cardType} border={cardType} text={cardType}>
-            <Card.Body>{content}</Card.Body>
+          <Card bg={cardType} border={cardType} text={'white'}>
+            <Card.Body>
+              <Card.Text>{content}</Card.Text>
+            </Card.Body>
           </Card>
           {this.state.lastAnswerCorrect}
         </Modal.Body>

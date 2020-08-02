@@ -23,17 +23,17 @@ import * as path from 'path';
 import { SoundItem, SoundType, TestType } from '../lib/interfaces';
 import TestSession from './TestSession';
 
-function itemCmp(it1: SoundItem, it2: SoundItem): -1 | 0 | 1 {
-  return it1.name < it2.name ? -1 : it1.name === it2.name ? 0 : +1;
-}
-
 interface TestProps {
   type: SoundType;
 }
 interface TestState {
   mode: 'setup' | 'test';
   testType: TestType;
-  items?: Array<SoundItem & { checked?: boolean }>;
+  itemsByType: {
+    [SoundType.Chord]?: Array<SoundItem & { checked?: boolean }>;
+    [SoundType.Note]?: Array<SoundItem & { checked?: boolean }>;
+    [SoundType.Pattern]?: Array<SoundItem & { checked?: boolean }>;
+  };
   selectedItems: Array<SoundItem & { checked?: boolean }>;
 }
 
@@ -43,29 +43,48 @@ class Test extends PureComponent<TestProps, TestState> {
     this.state = {
       mode: 'setup',
       testType: TestType.MultipleChoice,
-      items: null,
+      itemsByType: {
+        [SoundType.Chord]: undefined,
+        [SoundType.Note]: null,
+        [SoundType.Pattern]: null,
+      },
       selectedItems: [],
     };
 
-    const clipPath = path.join(app.getPath('userData'), 'clips');
-    if (!fs.pathExistsSync(clipPath) || fs.readdirSync(clipPath).length === 0) {
-      alert('Expected to find clips in ' + clipPath);
-    } else {
-      fs.readdir(clipPath).then((files) =>
-        this.setState({
-          items: files.map((f) => ({
-            id: f,
-            type: SoundType.Note,
-            name: path
-              .basename(f)
-              .substr(0, path.basename(f).length - path.extname(f).length),
-          })),
-        })
-      );
-    }
+    const fileOb = {
+      [SoundType.Chord]: undefined,
+      [SoundType.Note]: null,
+      [SoundType.Pattern]: null,
+    };
+    Promise.all(
+      Object.values(SoundType).map((tp) => {
+        const clipPath = path.join(app.getPath('userData'), 'clips', tp);
+        if (!fs.pathExistsSync(clipPath)) {
+          alert('Expected to find clips in ' + clipPath);
+        } else {
+          fs.readdir(clipPath).then((files) => {
+            fileOb[tp] = files.map((f) => ({
+              id: f,
+              type: SoundType.Note,
+              name: path
+                .basename(f)
+                .substr(0, path.basename(f).length - path.extname(f).length),
+            }));
+            this.setState({ itemsByType: fileOb });
+          });
+        }
+      })
+    );
   }
 
   public render() {
+    console.log([
+      [SoundType.Chord, 'Chords'],
+      [SoundType.Note, 'Notes'],
+      [SoundType.Pattern, 'Strumming patterns'],
+    ]);
+    console.log(this.props.type);
+    console.log('activeKey', `/test/${this.props.type}`);
     return (
       <Container>
         <Row>
@@ -82,7 +101,13 @@ class Test extends PureComponent<TestProps, TestState> {
             ].map(([tp, desc]) => (
               <Nav.Item key={tp}>
                 <LinkContainer to={`/test/${tp}`}>
-                  <Nav.Link href={`/test/${tp}`}>{desc}</Nav.Link>
+                  <Nav.Link
+                    eventKey={`/test/${tp}`}
+                    href={`/test/${tp}`}
+                    disabled={this.state.mode === 'test'}
+                  >
+                    {desc}
+                  </Nav.Link>
                 </LinkContainer>
               </Nav.Item>
             ))}
@@ -106,15 +131,16 @@ class Test extends PureComponent<TestProps, TestState> {
   }
 
   public renderChecklist() {
+    const tp = this.props.type;
     return (
       <Form>
-        {!this.state.items && (
+        {!this.state.itemsByType[tp] && (
           <ListGroupItem disabled={true}>No items</ListGroupItem>
         )}
         <Form.Row>
           {chunk(
-            this.state.items ?? [],
-            Math.ceil((this.state.items ?? []).length / 3)
+            this.state.itemsByType[tp] ?? [],
+            Math.ceil((this.state.itemsByType[tp] ?? []).length / 3)
           ).map((items, idx) => (
             <Col key={idx}>
               <ListGroup>
@@ -147,8 +173,9 @@ class Test extends PureComponent<TestProps, TestState> {
                   variant="primary"
                   type="submit"
                   disabled={
-                    (this.state.items || []).filter(({ checked }) => checked)
-                      .length < 2
+                    (this.state.itemsByType[tp] || []).filter(
+                      ({ checked }) => checked
+                    ).length < 2
                   }
                   onClick={() => this.start(TestType.MultipleChoice)}
                 >
@@ -158,8 +185,9 @@ class Test extends PureComponent<TestProps, TestState> {
                   variant="primary"
                   type="submit"
                   disabled={
-                    (this.state.items || []).filter(({ checked }) => checked)
-                      .length < 2
+                    (this.state.itemsByType[tp] || []).filter(
+                      ({ checked }) => checked
+                    ).length < 2
                   }
                   onClick={() => this.start(TestType.Entry)}
                 >
@@ -175,7 +203,8 @@ class Test extends PureComponent<TestProps, TestState> {
   }
 
   public toggleChecked(item) {
-    const items = this.state.items.map((it) => {
+    const tp = this.props.type;
+    const items = this.state.itemsByType[tp].map((it) => {
       if (it === item) {
         return Object.assign({}, item, { checked: !item.checked });
       } else {
@@ -183,7 +212,10 @@ class Test extends PureComponent<TestProps, TestState> {
       }
     });
     this.setState({
-      items,
+      itemsByType: {
+        ...this.state.itemsByType,
+        [tp]: items,
+      },
       selectedItems: items.filter(({ checked }) => checked),
     });
   }
