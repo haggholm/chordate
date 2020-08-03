@@ -51,6 +51,7 @@ const mainConfig: Webpack.Configuration = {
 
 const renderConfig: Webpack.Configuration = {
   entry: './src/client.tsx',
+  // entry: './src/esbuild-wrapper.tsx',
   target: 'electron-renderer',
   // externals: [nodeExternals()],
   output: {

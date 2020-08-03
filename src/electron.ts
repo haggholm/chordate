@@ -5,7 +5,7 @@ app.whenReady().then(async function createWindow() {
     width: 1024,
     height: 768,
     autoHideMenuBar: true,
-    skipTaskbar: true,
+    skipTaskbar: false,
     webPreferences: {
       // devTools: true,
       nodeIntegration: true,

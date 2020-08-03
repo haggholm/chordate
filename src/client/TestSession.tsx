@@ -1,15 +1,14 @@
 import { remote } from 'electron';
-const app = remote.app;
-
 import * as path from 'path';
 import { autobind } from 'core-decorators';
-import _ from 'lodash';
-import { PureComponent } from 'react';
-import React from 'react';
+import { find, sample } from 'lodash';
+import React, { PureComponent } from 'react';
 import {
   Button,
   Card,
   Col,
+  Form,
+  FormLabel,
   FormControl,
   FormGroup,
   ListGroup,
@@ -21,6 +20,8 @@ import {
 import * as fs from 'fs-extra';
 
 import { SoundItem, SoundType, TestType } from '../lib/interfaces';
+
+const app = remote.app;
 
 interface TestSessionProps {
   type: SoundType;
@@ -45,6 +46,7 @@ interface TestSessionState {
     [SoundType.Note]: Stats;
     [SoundType.Pattern]: Stats;
   };
+  repetitions: number;
 }
 
 interface Stats {
@@ -55,21 +57,75 @@ interface Stats {
   }>;
 }
 
+class Player {
+  private audio: HTMLAudioElement;
+  private repetitions: number;
+  private cancelled: boolean;
+  public readonly promise: Promise<void>;
+  private resolve: (value?: PromiseLike<void> | void) => void;
+  private reject: (reason?: any) => void;
+  private eventListener: () => void;
+
+  constructor(audio: HTMLAudioElement, repetitions: number = 1) {
+    this.audio = audio;
+    this.repetitions = repetitions;
+    this.cancelled = false;
+    this.promise = new Promise((resolve, reject) => {
+      this.resolve = resolve;
+      this.reject = reject;
+    });
+  }
+
+  public cancel() {
+    this.cancelled = true;
+    this.audio.pause();
+    this.audio.currentTime = 0;
+    this.reject();
+  }
+
+  public play() {
+    setImmediate(async () => {
+      for (let i = 0; i < this.repetitions && !this.cancelled; i++) {
+        this.audio.currentTime = 0;
+        await Promise.all([
+          this.audio.play(),
+          new Promise((resolve) => {
+            const fn = () => {
+              this.audio.removeEventListener('ended', fn);
+              resolve();
+            };
+            this.audio.addEventListener('ended', fn);
+          }),
+        ]);
+      }
+      this.resolve();
+    });
+    return this.promise;
+  }
+}
+
+// tslint:disable-next-line:max-classes-per-file
 export default class TestSession extends PureComponent<
   TestSessionProps,
   TestSessionState
 > {
   private closeModalTimeout: NodeJS.Timeout;
   private statsPath;
+  private player?: Player;
+
+  private get defaultRepetitions() {
+    return this.props.type === SoundType.Pattern ? 1 : 4;
+  }
 
   constructor(props) {
     super(props);
+    const currentItem = sample(props.items);
     this.statsPath = path.join(app.getPath('userData'), 'stats.json');
     this.state = {
       answered: 0,
       right: 0,
       wrong: 0,
-      currentItem: _.sample(props.items),
+      currentItem,
       lastAnswerCorrect: true,
       currentAnswer: '',
       isPlaying: false,
@@ -84,16 +140,14 @@ export default class TestSession extends PureComponent<
             [SoundType.Note]: { guesses: [] },
             [SoundType.Pattern]: { guesses: [] },
           },
+      repetitions: this.defaultRepetitions,
     };
 
-    this.loadCurrentItem(props);
+    this.loadCurrentItem(currentItem);
   }
 
   @autobind
-  public async loadCurrentItem(props = null) {
-    if (!props) {
-      props = this.props;
-    }
+  public async loadCurrentItem(item: SoundItem) {
     if (this.state.audioURL) {
       URL.revokeObjectURL(this.state.audioURL);
       this.setState({
@@ -107,53 +161,51 @@ export default class TestSession extends PureComponent<
       throw new Error('No current item available');
     }
 
+    if (this.player) {
+      this.player.cancel();
+      this.player = undefined;
+    }
+
     const buf = await fs.readFile(
       path.join(
         app.getPath('userData'),
         'clips',
         this.props.type,
-        this.state.currentItem.id as string
+        item.id as string
       )
     );
 
-    let type;
-    switch (path.extname(this.state.currentItem.id as string).toLowerCase()) {
-      case '.aif':
-        type = 'audio/x-aiff';
-        break;
-      case '.ogg':
-        type = 'audio/ogg';
-        break;
-      case '.webm':
-        type = 'audio/webm';
-        break;
-      default:
-        throw new Error('Unsupported audio type');
+    const type = {
+      '.aif': 'audio/x-aiff',
+      '.ogg': 'audio/ogg',
+      '.webm': 'audio/webm',
+    }[path.extname(this.state.currentItem.id as string).toLowerCase()];
+    if (!type) {
+      throw new Error('Unsupported audio type');
     }
     const audioBlob = new Blob([buf], { type });
     const audioURL = URL.createObjectURL(audioBlob);
 
-    this.setState({
-      audioBlob,
-      audioURL,
-      audio: new Audio(audioURL),
-    });
+    const audio = new Audio(audioURL);
+    this.setState({ audioBlob, audioURL, audio });
+
+    this.player = new Player(audio, this.state.repetitions);
     await this.play();
   }
 
   @autobind
   public async play() {
-    if (!this.state.audio) {
+    if (!this.player) {
       throw new Error('No audio to play');
     }
 
     this.setState({ isPlaying: true });
-    const fn = () => this.setState({ isPlaying: false });
-    await this.state.audio.play();
-    this.state.audio.addEventListener('ended', () => {
-      this.state.audio.removeEventListener('ended', fn);
-      this.setState({ isPlaying: false });
-    });
+    this.player.play().then(
+      () => this.setState({ isPlaying: false }),
+      () => {
+        // nop
+      }
+    );
   }
 
   public render() {
@@ -173,13 +225,6 @@ export default class TestSession extends PureComponent<
               <ProgressBar
                 striped={true}
                 max={this.state.answered}
-                label={this.state.wrong}
-                variant="danger"
-                now={this.state.wrong}
-              />
-              <ProgressBar
-                striped={true}
-                max={this.state.answered}
                 label={<strong>{this.state.wrong}</strong>}
                 variant="danger"
                 now={this.state.wrong}
@@ -189,7 +234,7 @@ export default class TestSession extends PureComponent<
         </Row>
         <Row>
           <Col md={12}>
-            {' '}
+            {/*JSON.stringify(this.state.currentItem)*/ ' '}
             <Button
               variant="primary"
               onClick={this.play}
@@ -200,6 +245,22 @@ export default class TestSession extends PureComponent<
               <i className="fa fa-play" />
               Play
             </Button>
+            <Form>
+              <FormGroup controlId="repetitions">
+                <FormLabel>Repetitions</FormLabel>
+                <FormControl
+                  type="number"
+                  value={this.state.repetitions}
+                  step={1}
+                  min={1}
+                  max={9}
+                  onChange={(e) =>
+                    this.setState({ repetitions: Number(e.target.value) })
+                  }
+                  placeholder="Repetitions"
+                />
+              </FormGroup>
+            </Form>
           </Col>
         </Row>
         <Row>{this.renderAnswerSection()}</Row>
@@ -266,7 +327,7 @@ export default class TestSession extends PureComponent<
       const a = answer as { id: number | string };
       correct = a.id === currentItem.id;
       this.setState({
-        currentAnswer: _.find(this.props.items, ({ id }) => id === a.id).name,
+        currentAnswer: find(this.props.items, ({ id }) => id === a.id).name,
       });
     } else {
       const a = answer as { answer: string };
@@ -286,7 +347,17 @@ export default class TestSession extends PureComponent<
       },
     };
 
+    if (this.player) {
+      this.player.cancel();
+      this.player = undefined;
+    }
+    if (this.state.audioURL) {
+      URL.revokeObjectURL(this.state.audioURL);
+    }
     this.setState({
+      audioBlob: null,
+      audioURL: null,
+      audio: null,
       showModal: true,
       lastAnswerCorrect: correct,
       stats,
@@ -305,9 +376,10 @@ export default class TestSession extends PureComponent<
       this.closeModalTimeout = null;
     }
 
+    const nextItem = sample(this.props.items);
     this.setState({
       showModal: false,
-      currentItem: _.sample(this.props.items),
+      currentItem: nextItem,
       currentAnswer: '',
       answered: this.state.answered + 1,
     });
@@ -316,7 +388,7 @@ export default class TestSession extends PureComponent<
     } else {
       this.setState({ wrong: this.state.wrong + 1 });
     }
-    await this.loadCurrentItem();
+    await this.loadCurrentItem(nextItem);
   }
 
   public componentDidUpdate(prevProps, prevState) {

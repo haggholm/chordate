@@ -10,10 +10,8 @@ import {
 import 'bootstrap/dist/css/bootstrap.min.css';
 import 'font-awesome/fonts/fontawesome-webfont.woff2';
 import 'font-awesome/scss/font-awesome.scss';
-
 import './app.scss';
 
-import ChoiceScreen from './ChoiceScreen';
 import Record from './Record';
 import Test from './Test';
 

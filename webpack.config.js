@@ -54,6 +54,7 @@ var mainConfig = {
 };
 var renderConfig = {
     entry: './src/client.tsx',
+    // entry: './src/esbuild-wrapper.tsx',
     target: 'electron-renderer',
     // externals: [nodeExternals()],
     output: {
