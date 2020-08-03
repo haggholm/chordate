@@ -1,16 +1,16 @@
 import { remote } from 'electron';
 import * as path from 'path';
 import { autobind } from 'core-decorators';
-import { find, sample } from 'lodash';
+import { find, isEqual, noop, sample, some } from 'lodash';
 import React, { PureComponent } from 'react';
 import {
   Button,
   Card,
   Col,
   Form,
-  FormLabel,
   FormControl,
   FormGroup,
+  FormLabel,
   ListGroup,
   ListGroupItem,
   Modal,
@@ -30,17 +30,26 @@ interface TestSessionProps {
 }
 
 interface TestSessionState {
+  audioSpeed: number;
   answered: number;
   right: number;
   wrong: number;
-  currentItem?: SoundItem;
-  currentAnswer: '';
+  currentItem?: SoundItem | SoundItem[];
+  currentAnswer: string;
   lastAnswerCorrect: boolean;
   isPlaying: boolean;
-  audioBlob?: Blob;
-  audioURL?: string;
-  audio?: HTMLAudioElement;
+  audioBlobs?: Blob[] | null;
+  audioURLs?: string[] | null;
+  audioElements?: HTMLAudioElement[] | null;
   showModal: boolean;
+  patternGuess:
+    | null
+    | [
+        string | number | null,
+        string | number | null,
+        string | number | null,
+        string | number | null
+      ];
   stats: {
     [SoundType.Chord]: Stats;
     [SoundType.Note]: Stats;
@@ -49,54 +58,79 @@ interface TestSessionState {
   repetitions: number;
 }
 
+type Guess =
+  | { id: number | string }
+  | { ids: Array<number | string> }
+  | { answer: string };
+
 interface Stats {
   guesses: Array<{
-    answer: { id: number | string } | { answer: string };
+    soundType: SoundType;
+    testType: TestType;
+    answer: Guess;
     correct: boolean;
     timestamp: string;
   }>;
 }
 
 class Player {
-  private audio: HTMLAudioElement;
+  private audio: HTMLAudioElement[];
   private repetitions: number;
   private cancelled: boolean;
   public readonly promise: Promise<void>;
   private resolve: (value?: PromiseLike<void> | void) => void;
   private reject: (reason?: any) => void;
-  private eventListener: () => void;
+  #speed: number;
 
-  constructor(audio: HTMLAudioElement, repetitions: number = 1) {
-    this.audio = audio;
+  constructor(
+    audio: HTMLAudioElement | HTMLAudioElement[],
+    repetitions: number = 1,
+    speed: number = 1
+  ) {
+    this.audio = Array.isArray(audio) ? audio : [audio];
     this.repetitions = repetitions;
     this.cancelled = false;
     this.promise = new Promise((resolve, reject) => {
       this.resolve = resolve;
       this.reject = reject;
     });
+    this.#speed = speed;
+    this.audio.forEach((el) => (el.playbackRate = speed));
+  }
+
+  public get speed() {
+    return this.#speed;
+  }
+  public set speed(speed: number) {
+    this.#speed = speed;
+    this.audio.forEach((el) => (el.playbackRate = speed));
   }
 
   public cancel() {
     this.cancelled = true;
-    this.audio.pause();
-    this.audio.currentTime = 0;
+    for (const a of this.audio) {
+      a.pause();
+      a.currentTime = 0;
+    }
     this.reject();
   }
 
   public play() {
     setImmediate(async () => {
       for (let i = 0; i < this.repetitions && !this.cancelled; i++) {
-        this.audio.currentTime = 0;
-        await Promise.all([
-          this.audio.play(),
-          new Promise((resolve) => {
-            const fn = () => {
-              this.audio.removeEventListener('ended', fn);
-              resolve();
-            };
-            this.audio.addEventListener('ended', fn);
-          }),
-        ]);
+        for (let j = 0; j < this.audio.length && !this.cancelled; j++) {
+          this.audio[j].currentTime = 0;
+          await Promise.all([
+            this.audio[j].play(),
+            new Promise((resolve) => {
+              const fn = () => {
+                this.audio[j].removeEventListener('ended', fn);
+                resolve();
+              };
+              this.audio[j].addEventListener('ended', fn);
+            }),
+          ]);
+        }
       }
       this.resolve();
     });
@@ -119,20 +153,20 @@ export default class TestSession extends PureComponent<
 
   constructor(props) {
     super(props);
-    const currentItem = sample(props.items);
+    const currentItem = this.pickItem(props.items);
     this.statsPath = path.join(app.getPath('userData'), 'stats.json');
     this.state = {
       answered: 0,
+      audioSpeed: 1,
+      currentAnswer: '',
+      currentItem,
+      isPlaying: false,
+      lastAnswerCorrect: true,
+      patternGuess: null,
+      repetitions: this.defaultRepetitions,
+      showModal: false,
       right: 0,
       wrong: 0,
-      currentItem,
-      lastAnswerCorrect: true,
-      currentAnswer: '',
-      isPlaying: false,
-      audioBlob: null,
-      audioURL: null,
-      audio: null,
-      showModal: false,
       stats: fs.pathExistsSync(this.statsPath)
         ? fs.readJSONSync(this.statsPath)
         : {
@@ -140,25 +174,35 @@ export default class TestSession extends PureComponent<
             [SoundType.Note]: { guesses: [] },
             [SoundType.Pattern]: { guesses: [] },
           },
-      repetitions: this.defaultRepetitions,
     };
 
     this.loadCurrentItem(currentItem);
   }
 
-  @autobind
-  public async loadCurrentItem(item: SoundItem) {
-    if (this.state.audioURL) {
-      URL.revokeObjectURL(this.state.audioURL);
-      this.setState({
-        audioBlob: null,
-        audioURL: null,
-        audio: null,
-      });
+  private pickItem(items): SoundItem | SoundItem[] {
+    if (this.props.type === SoundType.Pattern) {
+      // return sampleSize(items ?? this.props.items, 4);
+      const res = [];
+      for (let i = 0; i < 4; i++) {
+        res.push(sample(items ?? this.props.items));
+      }
+      return res;
+    } else {
+      return sample(items ?? this.props.items);
     }
+  }
 
-    if (!this.state.currentItem) {
-      throw new Error('No current item available');
+  @autobind
+  public async loadCurrentItem(item: SoundItem | SoundItem[]) {
+    if (this.state.audioURLs) {
+      for (const u of this.state.audioURLs) {
+        URL.revokeObjectURL(u);
+      }
+      this.setState({
+        audioBlobs: null,
+        audioURLs: null,
+        audioElements: null,
+      });
     }
 
     if (this.player) {
@@ -166,31 +210,52 @@ export default class TestSession extends PureComponent<
       this.player = undefined;
     }
 
-    const buf = await fs.readFile(
-      path.join(
-        app.getPath('userData'),
-        'clips',
-        this.props.type,
-        item.id as string
-      )
-    );
-
-    const type = {
-      '.aif': 'audio/x-aiff',
-      '.ogg': 'audio/ogg',
-      '.webm': 'audio/webm',
-    }[path.extname(this.state.currentItem.id as string).toLowerCase()];
-    if (!type) {
-      throw new Error('Unsupported audio type');
+    if (!this.state.currentItem) {
+      throw new Error('No current item available');
     }
-    const audioBlob = new Blob([buf], { type });
-    const audioURL = URL.createObjectURL(audioBlob);
 
-    const audio = new Audio(audioURL);
-    this.setState({ audioBlob, audioURL, audio });
-
-    this.player = new Player(audio, this.state.repetitions);
+    this.player = new Player(
+      await this.loadCurrentAudioFiles(item),
+      this.state.repetitions,
+      this.state.audioSpeed
+    );
     await this.play();
+  }
+
+  private async loadCurrentAudioFiles(
+    item: SoundItem | SoundItem[]
+  ): Promise<HTMLAudioElement[]> {
+    const files = Array.isArray(item) ? item : [item];
+    const audioBlobs: Blob[] = [];
+    const audioURLs: string[] = [];
+    const audioElements: HTMLAudioElement[] = [];
+    for (const f of files) {
+      const buf = await fs.readFile(
+        path.join(
+          app.getPath('userData'),
+          'clips',
+          this.props.type,
+          f.id as string
+        )
+      );
+
+      const type = {
+        '.aif': 'audio/x-aiff',
+        '.ogg': 'audio/ogg',
+        '.webm': 'audio/webm',
+      }[path.extname(f.id as string).toLowerCase()];
+      if (!type) {
+        throw new Error('Unsupported audio type');
+      }
+
+      const audioBlob = new Blob([buf], { type });
+      const audioURL = URL.createObjectURL(audioBlob);
+      audioBlobs.push(audioBlob);
+      audioURLs.push(audioURL);
+      audioElements.push(new Audio(audioURL));
+    }
+    this.setState({ audioBlobs, audioURLs, audioElements });
+    return audioElements;
   }
 
   @autobind
@@ -200,19 +265,14 @@ export default class TestSession extends PureComponent<
     }
 
     this.setState({ isPlaying: true });
-    this.player.play().then(
-      () => this.setState({ isPlaying: false }),
-      () => {
-        // nop
-      }
-    );
+    this.player.play().then(() => this.setState({ isPlaying: false }), noop);
   }
 
   public render() {
     return (
       <React.Fragment>
         {this.renderModal()}
-        <Row>
+        <Row style={{ paddingBottom: '1ex' }}>
           <Col md={12}>
             <ProgressBar>
               <ProgressBar
@@ -238,7 +298,7 @@ export default class TestSession extends PureComponent<
             <Button
               variant="primary"
               onClick={this.play}
-              disabled={this.state.isPlaying || !this.state.audio}
+              disabled={this.state.isPlaying || !this.state.audioElements}
               style={{ marginBottom: '1ex' }}
               id="test-session-play-button"
             >
@@ -246,20 +306,44 @@ export default class TestSession extends PureComponent<
               Play
             </Button>
             <Form>
-              <FormGroup controlId="repetitions">
-                <FormLabel>Repetitions</FormLabel>
-                <FormControl
-                  type="number"
-                  value={this.state.repetitions}
-                  step={1}
-                  min={1}
-                  max={9}
-                  onChange={(e) =>
-                    this.setState({ repetitions: Number(e.target.value) })
-                  }
-                  placeholder="Repetitions"
-                />
-              </FormGroup>
+              <Form.Group as={Form.Row}>
+                <FormLabel column={true} sm={2}>
+                  Repetitions
+                </FormLabel>
+                <Col sm={10}>
+                  <FormControl
+                    type="number"
+                    value={this.state.repetitions}
+                    step={1}
+                    min={1}
+                    max={9}
+                    onChange={(e) =>
+                      this.setState({ repetitions: Number(e.target.value) })
+                    }
+                    placeholder="Repetitions"
+                  />
+                </Col>
+              </Form.Group>
+              <Form.Group as={Form.Row}>
+                <Form.Label column={true} sm={2}>
+                  Playback speed ×{this.state.audioSpeed}
+                </Form.Label>
+                <Col sm={10}>
+                  <Form.Control
+                    type="range"
+                    min={0.25}
+                    max={3}
+                    step={0.25}
+                    value={this.state.audioSpeed}
+                    onChange={(e) => {
+                      this.setState({ audioSpeed: Number(e.target.value) });
+                      if (this.player) {
+                        this.player.speed = Number(e.target.value);
+                      }
+                    }}
+                  />
+                </Col>
+              </Form.Group>
             </Form>
           </Col>
         </Row>
@@ -268,21 +352,72 @@ export default class TestSession extends PureComponent<
     );
   }
 
+  private setPatternGuess(idx: number, id: string | number) {
+    const patternGuess = this.state.patternGuess
+      ? [...this.state.patternGuess]
+      : [null, null, null, null];
+    patternGuess[idx] = id;
+    this.setState({ patternGuess: patternGuess as any });
+  }
+
+  private guessPattern() {
+    this.guess({ ids: this.state.patternGuess });
+  }
+
   @autobind
   public renderAnswerSection() {
     if (this.props.mode === 'multiple-choice') {
-      return (
-        <ListGroup>
-          {this.props.items.map(({ id, name }) => (
-            <ListGroupItem
-              key={`${this.state.answered}:${id}`}
-              onClick={() => this.guess({ id })}
-            >
-              {name}
-            </ListGroupItem>
-          ))}
-        </ListGroup>
-      );
+      if (this.props.type === SoundType.Pattern) {
+        const res = [];
+        for (let i = 0; i < 4; i++) {
+          res.push(
+            <ListGroup key={i}>
+              <ListGroupItem>
+                <strong>{i}.</strong>
+              </ListGroupItem>
+              {this.props.items.map(({ id, name }) => (
+                <Form.Label key={name}>
+                  <Form.Check
+                    inline={true}
+                    type="radio"
+                    name={`pattern-guess-${i}`}
+                    key={`${this.state.answered}:${i}:${id}`}
+                    checked={this.state.patternGuess?.[i] === id}
+                    onClick={() => this.setPatternGuess(i, id)}
+                  />
+                  {name}
+                </Form.Label>
+              ))}
+            </ListGroup>
+          );
+        }
+        res.push(
+          <Button
+            key="btn"
+            onClick={() => this.guessPattern()}
+            disabled={
+              !this.state.patternGuess ||
+              some(this.state.patternGuess, (g) => g === null)
+            }
+          >
+            OK
+          </Button>
+        );
+        return res;
+      } else {
+        return (
+          <ListGroup>
+            {this.props.items.map(({ id, name }) => (
+              <ListGroupItem
+                key={`${this.state.answered}:${id}`}
+                onClick={() => this.guess({ id })}
+              >
+                {name}
+              </ListGroupItem>
+            ))}
+          </ListGroup>
+        );
+      }
     } else {
       return (
         <form
@@ -312,18 +447,38 @@ export default class TestSession extends PureComponent<
 
   @autobind
   public typeAnswer(evt) {
-    this.setState({ currentAnswer: evt.target.value });
+    this.setState({
+      currentAnswer:
+        this.props.type === SoundType.Pattern
+          ? { ids: evt.target.value.split(/,\s*/).map((s) => s.trim()) }
+          : evt.target.value.trim(),
+    });
   }
 
   @autobind
-  public guess(answer: { id: number | string } | { answer: string }) {
+  public guess(
+    answer:
+      | { id: number | string }
+      | { ids: Array<number | string> }
+      | { answer: string }
+  ) {
     const currentItem = this.state.currentItem;
     if (!currentItem) {
       throw new Error('No current item');
     }
 
     let correct;
-    if (answer.hasOwnProperty('id')) {
+    if (Array.isArray(currentItem)) {
+      const a = answer as { ids: Array<number | string> };
+      correct = isEqual(
+        a.ids,
+        currentItem.map(({ id }) => id)
+      );
+      const currentAnswerEls = a.ids.map(
+        (aId) => find(this.props.items, ({ id }) => id === aId).name
+      );
+      this.setState({ currentAnswer: currentAnswerEls.join(', ') });
+    } else if (answer.hasOwnProperty('id')) {
       const a = answer as { id: number | string };
       correct = a.id === currentItem.id;
       this.setState({
@@ -351,15 +506,15 @@ export default class TestSession extends PureComponent<
       this.player.cancel();
       this.player = undefined;
     }
-    if (this.state.audioURL) {
-      URL.revokeObjectURL(this.state.audioURL);
-    }
+    this.state.audioURLs?.forEach((u) => URL.revokeObjectURL(u));
+
     this.setState({
-      audioBlob: null,
-      audioURL: null,
-      audio: null,
-      showModal: true,
+      audioBlobs: null,
+      audioElements: null,
+      audioURLs: null,
       lastAnswerCorrect: correct,
+      patternGuess: null,
+      showModal: true,
       stats,
     });
     fs.writeJSON(this.statsPath, stats).then(null);
@@ -376,7 +531,7 @@ export default class TestSession extends PureComponent<
       this.closeModalTimeout = null;
     }
 
-    const nextItem = sample(this.props.items);
+    const nextItem = this.pickItem(this.props.items);
     this.setState({
       showModal: false,
       currentItem: nextItem,
@@ -409,7 +564,13 @@ export default class TestSession extends PureComponent<
         <Card.Title>Wrong!</Card.Title>
         {this.state.currentAnswer} was the wrong answer.
         <br />
-        The correct answer was <strong>{this.state.currentItem.name}</strong>.
+        The correct answer was{' '}
+        <strong>
+          {Array.isArray(this.state.currentItem)
+            ? this.state.currentItem.map(({ name }) => name).join(', ')
+            : this.state.currentItem.name}
+        </strong>
+        .
       </Card.Body>
     );
 
